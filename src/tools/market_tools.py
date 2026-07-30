@@ -1,23 +1,53 @@
 """
 Market Research Tools for Google ADK Agent.
-Demonstrates strongly-typed tools with input validation, structured output schemas,
-and comprehensive docstrings required for Tool & Interface Design evaluation.
+Implements strongly-typed tool interfaces utilizing explicit Pydantic input schemas,
+validated Pydantic output models, and guided error handling with LLM recovery instructions.
 """
 
-from typing import List, Optional
-from pydantic import BaseModel, Field
+from typing import List, Optional, Dict, Any, Union
+from src.compat import BaseModel, Field, ValidationError
 import datetime
+import re
 
 
 class MarketDataRequest(BaseModel):
-    ticker: str = Field(description="Stock ticker symbol or company identifier (e.g., GOOGL, AAPL, NVDA)")
-    timeframe: str = Field(default="1M", description="Analysis timeframe: 1D, 1W, 1M, 3M, 1Y, 5Y")
+    """Explicit Pydantic Input Schema for Market Data retrieval."""
+    ticker: str = Field(
+        description="Stock ticker symbol (1-5 alphanumeric chars, e.g. GOOGL, NVDA, AAPL, MSFT)",
+        min_length=1,
+        max_length=10
+    )
+    timeframe: str = Field(
+        default="1M",
+        description="Analysis lookback window. Allowed values: '1D', '1W', '1M', '3M', '1Y', '5Y'"
+    )
 
 
 class NewsSearchRequest(BaseModel):
-    query: str = Field(description="Search topic or company name")
-    category: str = Field(default="general", description="News category: tech, finance, regulatory, general")
-    max_results: int = Field(default=3, description="Maximum news articles to return")
+    """Explicit Pydantic Input Schema for Industry News search."""
+    query: str = Field(
+        description="Company name or sector research topic (e.g. 'Cloud AI', 'NVIDIA')",
+        min_length=1
+    )
+    category: str = Field(
+        default="general",
+        description="News category: 'tech', 'finance', 'regulatory', 'general'"
+    )
+    max_results: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        description="Maximum number of articles to return (1-10)"
+    )
+
+
+class ToolErrorResponse(BaseModel):
+    """Guided Error Response schema providing actionable recovery instructions to LLMs."""
+    status: str = "error"
+    error_code: str
+    error_message: str
+    recovery_instructions: str
+    suggested_fix: Dict[str, Any]
 
 
 class MarketNewsItem(BaseModel):
@@ -26,6 +56,13 @@ class MarketNewsItem(BaseModel):
     published_date: str
     summary: str
     relevance_score: float
+
+
+class NewsSearchResponse(BaseModel):
+    query: str
+    category: str
+    total_results: int
+    articles: List[MarketNewsItem]
 
 
 class MarketDataResponse(BaseModel):
@@ -38,24 +75,71 @@ class MarketDataResponse(BaseModel):
     pe_ratio: float
     analyst_consensus: str
     key_drivers: List[str]
+    timeframe: str = "1M"
 
 
-def fetch_market_data(ticker: str, timeframe: str = "1M") -> dict:
+def fetch_market_data(
+    request: Optional[MarketDataRequest] = None,
+    *,
+    ticker: Optional[str] = None,
+    timeframe: Optional[str] = None
+) -> Dict[str, Any]:
     """
     Fetches real-time market data, valuation metrics, and stock performance for a given ticker.
 
     Args:
-        ticker: The stock ticker symbol (e.g. 'GOOGL', 'NVDA', 'MSFT', 'AAPL').
-        timeframe: Lookback window ('1D', '1W', '1M', '3M', '1Y'). Defaults to '1M'.
+        request: Explicit Pydantic MarketDataRequest schema instance.
+        ticker: Optional keyword ticker string if called directly.
+        timeframe: Optional lookback timeframe ('1D', '1W', '1M', '3M', '1Y').
 
     Returns:
-        Structured market data including current price, 30-day change, valuation ratios, and analyst sentiment.
+        Validated MarketDataResponse dictionary or guided ToolErrorResponse with recovery steps.
     """
-    ticker_clean = ticker.strip().upper()
-    if not ticker_clean:
-        return {"error": "Ticker symbol cannot be empty."}
+    # 1. Resolve and Validate Input via Pydantic Schema
+    try:
+        if request is not None:
+            validated_req = request
+        else:
+            validated_req = MarketDataRequest(
+                ticker=ticker or "",
+                timeframe=timeframe or "1M"
+            )
+    except ValidationError as ve:
+        return ToolErrorResponse(
+            error_code="VALIDATION_ERROR",
+            error_message=f"Input validation failed: {str(ve.errors())}",
+            recovery_instructions=(
+                "Please verify that 'ticker' is a non-empty string between 1 and 10 characters "
+                "and 'timeframe' is one of ['1D', '1W', '1M', '3M', '1Y', '5Y']."
+            ),
+            suggested_fix={"ticker": "GOOGL", "timeframe": "1M"}
+        ).model_dump()
+    except Exception as e:
+        return ToolErrorResponse(
+            error_code="UNEXPECTED_INPUT_ERROR",
+            error_message=str(e),
+            recovery_instructions="Pass valid arguments matching the MarketDataRequest Pydantic model.",
+            suggested_fix={"ticker": "GOOGL", "timeframe": "1M"}
+        ).model_dump()
 
-    # Mock real market database lookup with deterministic financial data generator
+    # 2. Domain Level Format Validation
+    ticker_clean = validated_req.ticker.strip().upper()
+    if not re.match(r'^[A-Z0-9.\-]{1,10}$', ticker_clean):
+        return ToolErrorResponse(
+            error_code="INVALID_TICKER_FORMAT",
+            error_message=f"Ticker symbol '{validated_req.ticker}' contains invalid characters.",
+            recovery_instructions=(
+                "Provide a standard alphanumeric ticker symbol without special characters or spaces (e.g. 'GOOGL', 'NVDA', 'AAPL', 'MSFT')."
+            ),
+            suggested_fix={"ticker": "GOOGL", "timeframe": validated_req.timeframe}
+        ).model_dump()
+
+    valid_timeframes = {"1D", "1W", "1M", "3M", "1Y", "5Y"}
+    tf_clean = validated_req.timeframe.strip().upper()
+    if tf_clean not in valid_timeframes:
+        tf_clean = "1M"
+
+    # 3. Deterministic Mock Market DB
     mock_db = {
         "GOOGL": {
             "company_name": "Alphabet Inc.",
@@ -102,7 +186,7 @@ def fetch_market_data(ticker: str, timeframe: str = "1M") -> dict:
         "market_cap": "500B",
         "pe_ratio": 22.0,
         "analyst_consensus": "Hold",
-        "key_drivers": [f"Sector growth in {timeframe}", "Operational efficiency", "R&D investments"]
+        "key_drivers": [f"Sector growth in {tf_clean}", "Operational efficiency", "R&D investments"]
     })
 
     response = MarketDataResponse(
@@ -114,52 +198,89 @@ def fetch_market_data(ticker: str, timeframe: str = "1M") -> dict:
         market_cap=data["market_cap"],
         pe_ratio=data["pe_ratio"],
         analyst_consensus=data["analyst_consensus"],
-        key_drivers=data["key_drivers"]
+        key_drivers=data["key_drivers"],
+        timeframe=tf_clean
     )
     return response.model_dump()
 
 
-def search_industry_news(query: str, category: str = "general", max_results: int = 3) -> dict:
+def search_industry_news(
+    request: Optional[NewsSearchRequest] = None,
+    *,
+    query: Optional[str] = None,
+    category: Optional[str] = "general",
+    max_results: Optional[int] = 3
+) -> Dict[str, Any]:
     """
     Searches for recent market news, regulatory updates, and sector events.
 
     Args:
-        query: Company or industry search query (e.g. 'Cloud Computing AI', 'Alphabet Earnings').
+        request: Explicit Pydantic NewsSearchRequest schema instance.
+        query: Company or industry search query (e.g. 'Cloud AI', 'Alphabet').
         category: News category ('tech', 'finance', 'regulatory', 'general').
-        max_results: Maximum articles to return (1-5).
+        max_results: Maximum articles to return (1-10).
 
     Returns:
-        Structured list of recent news articles with relevance scores and summaries.
+        Validated NewsSearchResponse dictionary or guided ToolErrorResponse with recovery steps.
     """
+    # 1. Resolve and Validate Input via Pydantic Schema
+    try:
+        if request is not None:
+            validated_req = request
+        else:
+            validated_req = NewsSearchRequest(
+                query=query or "",
+                category=category or "general",
+                max_results=max_results if max_results is not None else 3
+            )
+    except ValidationError as ve:
+        return ToolErrorResponse(
+            error_code="VALIDATION_ERROR",
+            error_message=f"News search input validation failed: {str(ve.errors())}",
+            recovery_instructions="Provide a non-empty 'query' string and 'max_results' between 1 and 10.",
+            suggested_fix={"query": "AI Agents Market", "category": "tech", "max_results": 3}
+        ).model_dump()
+    except Exception as e:
+        return ToolErrorResponse(
+            error_code="UNEXPECTED_INPUT_ERROR",
+            error_message=str(e),
+            recovery_instructions="Provide valid search parameters matching the NewsSearchRequest Pydantic model.",
+            suggested_fix={"query": "Enterprise AI", "category": "tech", "max_results": 3}
+        ).model_dump()
+
     today_str = datetime.date.today().isoformat()
-    
+    q = validated_req.query.strip()
+    cat = validated_req.category.strip().lower()
+    limit = max(1, min(10, validated_req.max_results))
+
     mock_articles = [
-        {
-            "headline": f"Enterprise Adoption of Autonomous Agents Accelerates in {category.capitalize()}",
-            "source": "Tech Intelligence Daily",
-            "published_date": today_str,
-            "summary": f"Key market player '{query}' reported significant ROI gains following deployment of multi-agent AI systems.",
-            "relevance_score": 0.95
-        },
-        {
-            "headline": f"Quarterly Sector Outlook: Growth Trends for {query}",
-            "source": "Global Financial Review",
-            "published_date": today_str,
-            "summary": f"Analysts highlight strong capital investment and high gross margins across major enterprise solutions related to {query}.",
-            "relevance_score": 0.88
-        },
-        {
-            "headline": f"Regulatory Frameworks and Compliance Benchmarks Updated",
-            "source": "Market Watch Standard",
-            "published_date": today_str,
-            "summary": "New guidelines emphasize data governance, telemetry transparency, and auditability in automated workflows.",
-            "relevance_score": 0.82
-        }
+        MarketNewsItem(
+            headline=f"Enterprise Adoption of Autonomous Agents Accelerates in {cat.capitalize()}",
+            source="Tech Intelligence Daily",
+            published_date=today_str,
+            summary=f"Key market player '{q}' reported significant ROI gains following deployment of multi-agent AI systems.",
+            relevance_score=0.95
+        ),
+        MarketNewsItem(
+            headline=f"Quarterly Sector Outlook: Growth Trends for {q}",
+            source="Global Financial Review",
+            published_date=today_str,
+            summary=f"Analysts highlight strong capital investment and high gross margins across major enterprise solutions related to {q}.",
+            relevance_score=0.88
+        ),
+        MarketNewsItem(
+            headline="Regulatory Frameworks and Compliance Benchmarks Updated",
+            source="Market Watch Standard",
+            published_date=today_str,
+            summary="New guidelines emphasize data governance, telemetry transparency, and auditability in automated workflows.",
+            relevance_score=0.82
+        )
     ]
 
-    return {
-        "query": query,
-        "category": category,
-        "total_results": min(max_results, len(mock_articles)),
-        "articles": mock_articles[:max_results]
-    }
+    response = NewsSearchResponse(
+        query=q,
+        category=cat,
+        total_results=min(limit, len(mock_articles)),
+        articles=mock_articles[:limit]
+    )
+    return response.model_dump()

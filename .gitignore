@@ -45,3 +45,14 @@ htmlcov/
 
 # Logs
 *.log
+
+# Databases & Local State
+data/*.db*
+*.sqlite*
+*.db
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
