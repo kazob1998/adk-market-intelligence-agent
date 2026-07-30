@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ADK Market Intelligence Agent | Google ADK</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <header>
+    <div class="logo-container">
+      <div class="logo-badge">ADK</div>
+      <div>
+        <h1>Market Intelligence Agent</h1>
+        <p style="font-size: 0.75rem; color: var(--text-muted);">Multi-Agent Enterprise Strategy System</p>
+      </div>
+    </div>
+    <div class="status-pills">
+      <div class="pill"><div class="pill-dot"></div> Google ADK 0.1+</div>
+      <div class="pill">Gemini 2.5 Flash</div>
+      <div class="pill">Telemetry Enabled</div>
+    </div>
+  </header>
+
+  <main>
+    <div class="sidebar">
+      <div class="card">
+        <div class="card-title">💡 Analysis Prompts</div>
+        <div class="preset-buttons">
+          <button class="btn-preset" onclick="setPrompt('Analyze Alphabet Inc (GOOGL) quarterly growth trends, debt health, and enterprise AI risks.')">
+            📈 Alphabet (GOOGL) Deep Dive
+          </button>
+          <button class="btn-preset" onclick="setPrompt('Perform financial risk scoring and market analysis for NVIDIA (NVDA).')">
+            ⚡ NVIDIA (NVDA) Risk Score
+          </button>
+          <button class="btn-preset" onclick="setPrompt('Evaluate Microsoft (MSFT) enterprise cloud market sentiment and debt ratios.')">
+            ☁️ Microsoft (MSFT) Cloud Briefing
+          </button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">🔍 Custom Analysis Query</div>
+        <div class="search-box">
+          <textarea id="queryInput" placeholder="Enter target company ticker or strategic research prompt..."></textarea>
+          <button class="btn-primary" onclick="runAnalysis()">
+            <span>🚀 Run Agent Analysis</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">🧪 Automated Benchmark</div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+          Triggers the evaluation suite to benchmark Tool Usage, Context Retention, and Latency against 100pt criteria.
+        </p>
+        <button class="btn-primary" style="background: linear-gradient(135deg, var(--accent-emerald), var(--accent-cyan));" onclick="runBenchmark()">
+          <span>📊 Run Evaluation Suite</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="content-area">
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('briefingTab', this)">📄 Executive Briefing</button>
+        <button class="tab-btn" onclick="switchTab('traceTab', this)">📡 Live Traces & Metrics</button>
+        <button class="tab-btn" onclick="switchTab('memoryTab', this)">🧠 Session Memory</button>
+        <button class="tab-btn" onclick="switchTab('evalTab', this)">🎯 Benchmark Score</button>
+      </div>
+
+      <div id="loader" class="loader">
+        <div class="spinner"></div>
+        <p style="color: var(--accent-cyan); font-weight: 600;">Orchestrating Sub-Agents & Tools...</p>
+      </div>
+
+      <!-- 1. Executive Briefing Panel -->
+      <div id="briefingTab" class="panel active">
+        <div class="card">
+          <div id="briefingContent">
+            <div style="text-align: center; padding: 3rem; color: var(--text-muted);">
+              <h3>No Analysis Generated Yet</h3>
+              <p>Select a preset prompt or enter your custom request on the left to invoke the agent.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Telemetry Traces Panel -->
+      <div id="traceTab" class="panel">
+        <div class="card">
+          <div class="card-title">📡 OpenTelemetry Execution Spans</div>
+          <div id="traceContent">
+            <p style="color: var(--text-muted);">Click "Run Agent Analysis" to record real-time spans.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Session Memory Panel -->
+      <div id="memoryTab" class="panel">
+        <div class="card">
+          <div class="card-title">🧠 Context & Memory Inspection</div>
+          <div id="memoryContent">
+            <p style="color: var(--text-muted);">Active session history and recalled long-term memories will be displayed here.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. Benchmark Evaluation Panel -->
+      <div id="evalTab" class="panel">
+        <div class="card">
+          <div class="card-title">🎯 Benchmark Evaluation Breakdown</div>
+          <div id="evalContent">
+            <p style="color: var(--text-muted);">Run the Evaluation Suite to score the agent across the 5 evaluation criteria.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    Google ADK Agent Assessment Project | Built for AI in 5 Days Assessment
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

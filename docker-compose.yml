@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  agent-app:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - GOOGLE_CLOUD_PROJECT=adk-market-intel-demo
+      - ENVIRONMENT=development
+      - LOG_LEVEL=INFO
+    restart: unless-stopped
